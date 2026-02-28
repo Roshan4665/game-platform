@@ -27,7 +27,20 @@ export default function DoodleBattleGame({ room, doodleRound, playerId }: Props)
   const lastScoreTimeRef = useRef(0);
   const scoringInProgressRef = useRef(false);
   const latestDrawingRef = useRef<string>("");
+  const prevRoundRef = useRef(doodleRound.roundNumber);
   const players = Object.values(room.players);
+
+  // Reset state when round changes
+  useEffect(() => {
+    if (doodleRound.roundNumber !== prevRoundRef.current) {
+      prevRoundRef.current = doodleRound.roundNumber;
+      setMyLatestScore(null);
+      setTimeLeft(ROUND_DURATION);
+      lastScoreTimeRef.current = 0;
+      scoringInProgressRef.current = false;
+      latestDrawingRef.current = "";
+    }
+  }, [doodleRound.roundNumber]);
 
   const myScores = doodleRound.scores?.[playerId]
     ? Object.values(doodleRound.scores[playerId])
@@ -119,24 +132,20 @@ export default function DoodleBattleGame({ room, doodleRound, playerId }: Props)
         }
         return;
       }
-
       const res = await fetch("/api/doodle-score", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt: doodleRound.prompt, drawings: drawingsData, isFinal }),
       });
       const data = await res.json();
-
       if (data.scores) {
         if (isFinal) {
-          // Final: just store finalScores + verdict, no saveDoodleScore
           const finalScores: Record<string, number> = {};
           for (const [pid, s] of Object.entries(data.scores) as [string, { score: number }][]) {
             finalScores[pid] = s.score;
           }
           await finishDoodleRound(room.id, doodleRound.roundNumber, finalScores, data.verdict || "Both gave it a good shot!");
         } else {
-          // Midway: save scores with suggestions
           for (const [pid, s] of Object.entries(data.scores) as [string, { score: number; suggestion: string }][]) {
             await saveDoodleScore(room.id, doodleRound.roundNumber, pid, s.score, s.suggestion || "Keep going!");
           }
@@ -168,13 +177,20 @@ export default function DoodleBattleGame({ room, doodleRound, playerId }: Props)
     await saveDoodleDrawing(room.id, doodleRound.roundNumber, playerId, imageData);
   }, [room.id, doodleRound.roundNumber, playerId]);
 
-  // Show midway score + suggestion as toast
+  // Update midway score toast from Firebase
   useEffect(() => {
     if (myScores.length > 0) {
       const latest = myScores[myScores.length - 1];
       setMyLatestScore({ score: latest.score, suggestion: latest.suggestion || "" });
     }
   }, [myScores.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Clear toast when entering round-result phase
+  useEffect(() => {
+    if (doodleRound.phase === "round-result" || doodleRound.phase === "generating-prompt") {
+      setMyLatestScore(null);
+    }
+  }, [doodleRound.phase]);
 
   // Instructions modal
   if (showInstructions && (doodleRound.phase === "generating-prompt" || doodleRound.phase === "drawing")) {
@@ -212,7 +228,6 @@ export default function DoodleBattleGame({ room, doodleRound, playerId }: Props)
   // Phase: Drawing
   if (doodleRound.phase === "drawing") {
     const timerColor = timeLeft > 30 ? "text-green-400" : timeLeft > 10 ? "text-yellow-400" : "text-red-400";
-
     return (
       <div className="bg-gray-900 rounded-xl p-6 border border-gray-800 relative">
         <div className="flex justify-between items-center mb-3">
@@ -221,13 +236,10 @@ export default function DoodleBattleGame({ room, doodleRound, playerId }: Props)
             {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, "0")}
           </span>
         </div>
-
         <div className="text-center mb-4">
           <p className="text-sm text-gray-400">Draw:</p>
           <p className="text-xl font-bold text-purple-400">{doodleRound.prompt}</p>
         </div>
-
-        {/* Midway score as floating toast — score + improvement suggestion */}
         {myLatestScore && (
           <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-gray-800 border border-gray-700 rounded-xl shadow-lg max-w-sm text-center">
             <span className="text-lg font-bold text-purple-400">{myLatestScore.score}/10</span>
@@ -236,9 +248,7 @@ export default function DoodleBattleGame({ room, doodleRound, playerId }: Props)
             )}
           </div>
         )}
-
         <DrawingCanvas onSave={handleDrawingSave} disabled={timeLeft <= 0} saveInterval={4000} />
-
         {timeLeft <= 0 && (
           <div className="mt-4 text-center">
             <p className="text-yellow-400 animate-pulse">Time is up! Calculating final scores...</p>
@@ -273,7 +283,6 @@ export default function DoodleBattleGame({ room, doodleRound, playerId }: Props)
         <h2 className="text-xl font-bold text-center mb-4">
           {isTie ? "🤝 It\u2019s a tie!" : `🏆 ${room.players[winnerId]?.name} wins this round!`}
         </h2>
-
         <div className="grid grid-cols-2 gap-4 mb-4">
           {sorted.map((pid) => {
             const drawing = doodleRound.drawings?.[pid];
@@ -292,18 +301,14 @@ export default function DoodleBattleGame({ room, doodleRound, playerId }: Props)
             );
           })}
         </div>
-
         <p className="text-center text-gray-400 mb-2">
           Prompt: <span className="text-white font-medium">{doodleRound.prompt}</span>
         </p>
-
-        {/* AI verdict — single comparative line */}
         {doodleRound.verdict && (
           <div className="mb-4 p-3 bg-gray-800 rounded-lg text-center">
             <p className="text-sm text-gray-300">🤖 {doodleRound.verdict}</p>
           </div>
         )}
-
         <button
           onClick={() => nextRound(room.id)}
           className="w-full py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-medium transition-colors"

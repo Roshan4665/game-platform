@@ -97,11 +97,13 @@ export default function RoomPage() {
     const sorted = Object.entries(scores).sort(([, a], [, b]) => b - a);
     const winnerEntry = sorted[0];
     const winner = room.players[winnerEntry[0]];
+    const isDoodle = room.gameType === "doodle-battle";
+    const doodleRounds = room.doodleRounds || {};
 
     return (
       <div className="flex flex-col items-center gap-6 mt-12">
         <h1 className="text-3xl font-bold">Game Over</h1>
-        <div className="bg-gray-900 rounded-xl p-6 border border-gray-800 w-full max-w-md">
+        <div className="bg-gray-900 rounded-xl p-6 border border-gray-800 w-full max-w-lg">
           <h2 className="text-xl font-semibold text-center mb-4">
             🏆 {winner?.name || "Unknown"} wins!
           </h2>
@@ -112,6 +114,47 @@ export default function RoomPage() {
             </div>
           ))}
         </div>
+
+        {/* Per-round breakdown for doodle-battle */}
+        {isDoodle && Object.keys(doodleRounds).length > 0 && (
+          <div className="w-full max-w-lg space-y-4">
+            <h3 className="text-lg font-semibold text-center">Round-by-Round</h3>
+            {Object.values(doodleRounds).map((dr) => {
+              const fs = dr.finalScores || {};
+              const pids = Object.keys(room.players);
+              return (
+                <div key={dr.roundNumber} className="bg-gray-900 rounded-xl p-4 border border-gray-800">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-sm font-medium text-gray-400">Round {dr.roundNumber}</span>
+                    <span className="text-sm text-purple-400 font-medium">{dr.prompt}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {pids.map((pid) => {
+                      const drawing = dr.drawings?.[pid];
+                      return (
+                        <div key={pid} className="text-center">
+                          <p className="text-xs text-gray-400">{room.players[pid]?.name}</p>
+                          <p className="text-lg font-bold text-purple-400">{fs[pid] || 0}/10</p>
+                          {drawing?.imageData && (
+                            <img
+                              src={drawing.imageData}
+                              alt={`${room.players[pid]?.name}'s drawing`}
+                              className="w-full aspect-square rounded-lg border border-gray-700 bg-white mt-1"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {dr.verdict && (
+                    <p className="text-xs text-gray-400 text-center mt-2">🤖 {dr.verdict}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         <a href="/" className="text-purple-400 hover:underline">Back to Home</a>
       </div>
     );
