@@ -129,6 +129,16 @@ export default function Home() {
           >
             ❓ Yes / No
           </button>
+          <button
+            onClick={() => setGameType("doodle-battle")}
+            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
+              gameType === "doodle-battle"
+                ? "bg-purple-600 text-white"
+                : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+            }`}
+          >
+            🎨 Doodle Battle
+          </button>
         </div>
 
         <label className="block text-sm text-gray-400 mb-1">Rounds</label>

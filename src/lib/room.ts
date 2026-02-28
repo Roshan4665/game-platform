@@ -1,6 +1,6 @@
 import { ref, set, get, update, push, onValue, off } from "firebase/database";
 import { db } from "./firebase";
-import { GameRoom, GameType, Player, Round, HintSource, RoundPhase } from "./types";
+import { GameRoom, GameType, Player, Round, HintSource, RoundPhase, DoodleRound } from "./types";
 import { nanoid } from "nanoid";
 
 export async function createRoom(
@@ -46,6 +46,21 @@ export async function startGame(roomId: string) {
   const room = snapshot.val() as GameRoom;
   const playerIds = Object.keys(room.players);
   if (playerIds.length !== 2) return;
+
+  if (room.gameType === "doodle-battle") {
+    const doodleRound: DoodleRound = {
+      roundNumber: 1,
+      phase: "generating-prompt",
+      drawings: {},
+      scores: {},
+    };
+    await update(ref(db, `rooms/${roomId}`), {
+      status: "playing",
+      currentRound: 1,
+      "doodleRounds/1": doodleRound,
+    });
+    return;
+  }
 
   const round: Round = {
     roundNumber: 1,
@@ -198,11 +213,24 @@ export async function nextRound(roomId: string) {
   const snapshot = await get(ref(db, `rooms/${roomId}`));
   if (!snapshot.exists()) return;
   const room = snapshot.val() as GameRoom;
-  const playerIds = Object.keys(room.players);
   const nextRoundNum = room.currentRound + 1;
 
   if (nextRoundNum > room.totalRounds) {
     await update(ref(db, `rooms/${roomId}`), { status: "finished" });
+    return;
+  }
+
+  if (room.gameType === "doodle-battle") {
+    const doodleRound: DoodleRound = {
+      roundNumber: nextRoundNum,
+      phase: "generating-prompt",
+      drawings: {},
+      scores: {},
+    };
+    await update(ref(db, `rooms/${roomId}`), {
+      currentRound: nextRoundNum,
+      [`doodleRounds/${nextRoundNum}`]: doodleRound,
+    });
     return;
   }
 
@@ -229,4 +257,52 @@ export function subscribeToRoom(roomId: string, callback: (room: GameRoom | null
     callback(snapshot.exists() ? (snapshot.val() as GameRoom) : null);
   });
   return () => off(roomRef);
+}
+
+// Doodle game functions
+
+export async function setDoodlePrompt(roomId: string, roundNumber: number, prompt: string) {
+  await update(ref(db, `rooms/${roomId}/doodleRounds/${roundNumber}`), {
+    prompt,
+    phase: "drawing",
+    startedAt: Date.now(),
+  });
+}
+
+export async function saveDoodleDrawing(roomId: string, roundNumber: number, playerId: string, imageData: string) {
+  await update(ref(db, `rooms/${roomId}/doodleRounds/${roundNumber}/drawings/${playerId}`), {
+    imageData,
+    lastUpdated: Date.now(),
+  });
+}
+
+export async function saveDoodleScore(
+  roomId: string,
+  roundNumber: number,
+  playerId: string,
+  score: number,
+  suggestion: string
+) {
+  const scoresRef = ref(db, `rooms/${roomId}/doodleRounds/${roundNumber}/scores/${playerId}`);
+  await push(scoresRef, { score, suggestion, timestamp: Date.now() });
+}
+
+export async function finishDoodleRound(
+  roomId: string,
+  roundNumber: number,
+  finalScores: Record<string, number>,
+  verdict: string
+) {
+  await update(ref(db, `rooms/${roomId}/doodleRounds/${roundNumber}`), {
+    phase: "round-result",
+    finalScores,
+    verdict,
+  });
+
+  const scoresSnap = await get(ref(db, `rooms/${roomId}/scores`));
+  const scores = scoresSnap.val() || {};
+  for (const [pid, pts] of Object.entries(finalScores)) {
+    scores[pid] = (scores[pid] || 0) + pts;
+  }
+  await update(ref(db, `rooms/${roomId}/scores`), scores);
 }

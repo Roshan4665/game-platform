@@ -1,7 +1,8 @@
-export type GameType = "word-guesser" | "yes-no";
+export type GameType = "word-guesser" | "yes-no" | "doodle-battle";
 export type HintSource = "llm" | "player";
 export type RoomStatus = "waiting" | "playing" | "finished";
 export type RoundPhase = "picking-word" | "guessing" | "round-result";
+export type DoodlePhase = "generating-prompt" | "drawing" | "final-scoring" | "round-result";
 
 export interface Player {
   id: string;
@@ -46,7 +47,30 @@ export interface GameRoom {
   currentRound: number;
   players: Record<string, Player>;
   rounds: Record<string, Round>;
+  doodleRounds?: Record<string, DoodleRound>;
   createdBy: string;
   createdAt: number;
   scores: Record<string, number>;
+}
+
+export interface DoodleDrawing {
+  imageData: string;       // base64 PNG
+  lastUpdated: number;
+}
+
+export interface DoodleScore {
+  score: number;           // 0-10
+  suggestion?: string;     // midway improvement tip
+  timestamp: number;
+}
+
+export interface DoodleRound {
+  roundNumber: number;
+  prompt?: string;         // AI-generated drawing prompt
+  phase: DoodlePhase;
+  startedAt?: number;      // when drawing phase started
+  drawings: Record<string, DoodleDrawing>;   // playerId -> drawing
+  scores: Record<string, DoodleScore[]>;     // playerId -> midway scores only
+  finalScores?: Record<string, number>;      // playerId -> final score for this round
+  verdict?: string;                          // AI's final comparative verdict
 }

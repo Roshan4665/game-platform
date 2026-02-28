@@ -7,6 +7,7 @@ import { subscribeToRoom, startGame } from "@/lib/room";
 import { GameRoom } from "@/lib/types";
 import WordGuesserGame from "@/components/WordGuesserGame";
 import YesNoGame from "@/components/YesNoGame";
+import DoodleBattleGame from "@/components/DoodleBattleGame";
 
 export default function RoomPage() {
   const params = useParams();
@@ -55,7 +56,7 @@ export default function RoomPage() {
         <div className="bg-gray-900 rounded-xl p-6 border border-gray-800 w-full max-w-md">
           <p className="text-sm text-gray-400 mb-1">Game</p>
           <p className="font-medium mb-4">
-            {room.gameType === "word-guesser" ? "🔤 Word Guesser" : "❓ Yes / No"}
+            {room.gameType === "word-guesser" ? "🔤 Word Guesser" : room.gameType === "yes-no" ? "❓ Yes / No" : "🎨 Doodle Battle"}
           </p>
           <p className="text-sm text-gray-400 mb-1">Rounds</p>
           <p className="font-medium mb-4">{room.totalRounds}</p>
@@ -117,6 +118,35 @@ export default function RoomPage() {
   }
 
   // Playing
+  if (room.gameType === "doodle-battle") {
+    const currentDoodleRound = room.doodleRounds?.[room.currentRound];
+    if (!currentDoodleRound) {
+      return <div className="text-center mt-20 text-gray-400">Loading round...</div>;
+    }
+
+    return (
+      <div className="mt-8">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-lg font-bold">Room: {roomId}</h1>
+          <div className="text-sm text-gray-400">
+            Round {room.currentRound}/{room.totalRounds}
+          </div>
+        </div>
+
+        <div className="flex justify-between mb-6 text-sm">
+          {players.map((p) => (
+            <div key={p.id} className="text-center">
+              <p className="text-gray-400">{p.name}</p>
+              <p className="text-xl font-bold text-purple-400">{room.scores?.[p.id] || 0}</p>
+            </div>
+          ))}
+        </div>
+
+        <DoodleBattleGame room={room} doodleRound={currentDoodleRound} playerId={player.id} />
+      </div>
+    );
+  }
+
   const currentRound = room.rounds?.[room.currentRound];
   if (!currentRound) {
     return <div className="text-center mt-20 text-gray-400">Loading round...</div>;
